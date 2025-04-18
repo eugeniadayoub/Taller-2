@@ -1,7 +1,6 @@
 package com.example.taller2
 
 import android.Manifest
-import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -34,6 +33,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import coil.compose.rememberAsyncImagePainter
 import com.google.accompanist.permissions.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -88,28 +89,26 @@ fun PermissionRequestView(onRequest: () -> Unit) {
 fun PhotoCabinView() {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     var lensFacing by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
     val imageCapture = remember { ImageCapture.Builder().build() }
-    val photosDir = File(context.filesDir, "photos").apply { mkdirs() }
+    val photosDir = remember {
+        File(context.filesDir, "photos").apply { mkdirs() }
+    }
     val photos = remember { mutableStateListOf<File>() }
 
-    var cameraProvider: ProcessCameraProvider? by remember { mutableStateOf(null) }
+    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
 
-    LaunchedEffect(cameraProviderFuture) {
-        cameraProvider = cameraProviderFuture.get()
-    }
-
-    if (cameraProvider == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+    LaunchedEffect(Unit) {
+        val provider = withContext(Dispatchers.IO) {
+            ProcessCameraProvider.getInstance(context).get()
         }
-        return
+        cameraProvider = provider
     }
+
+    var previewView: PreviewView? = null
 
     Column(modifier = Modifier.fillMaxSize()) {
 
-        // Título estilo barra superior
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -123,104 +122,101 @@ fun PhotoCabinView() {
             )
         }
 
-        // Vista de cámara más compacta (30% de la altura de la pantalla)
-        val displayMetrics = LocalContext.current.resources.displayMetrics
-        val screenHeightDp = with(LocalDensity.current) { displayMetrics.heightPixels / displayMetrics.density } // convertir a dp
-        val cameraHeightDp = (0.3f * screenHeightDp).dp // altura de la cámara 30% de la pantalla
+        val displayMetrics = context.resources.displayMetrics
+        val screenHeightDp = with(LocalDensity.current) { displayMetrics.heightPixels / displayMetrics.density }
+        val cameraHeightDp = (0.3f * screenHeightDp).dp
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(cameraHeightDp) // ahora se usa un valor de tipo Dp
+                .height(cameraHeightDp)
         ) {
             AndroidView(
                 factory = { ctx ->
-                    val previewView = PreviewView(ctx)
+                    previewView = PreviewView(ctx).apply {
+                        scaleType = PreviewView.ScaleType.FIT_CENTER
+                        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                    }
+                    previewView!!
+                },
+                modifier = Modifier.fillMaxSize(),
+                update = {
                     val preview = Preview.Builder().build()
-                    val cameraSelector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
+                    val selector = CameraSelector.Builder()
+                        .requireLensFacing(lensFacing)
+                        .build()
 
+                    cameraProvider?.unbindAll()
                     try {
-                        cameraProvider?.unbindAll()
+                        preview.setSurfaceProvider(previewView?.surfaceProvider)
                         cameraProvider?.bindToLifecycle(
                             lifecycleOwner,
-                            cameraSelector,
+                            selector,
                             preview,
                             imageCapture
                         )
-                        preview.setSurfaceProvider(previewView.surfaceProvider)
                     } catch (e: Exception) {
-                        Toast.makeText(ctx, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
                     }
-
-                    previewView
-                },
-                modifier = Modifier.matchParentSize()
+                }
             )
 
-            // Botones de captura y cambio de cámara
-            Row(
+            IconButton(
+                onClick = {
+                    lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK)
+                        CameraSelector.LENS_FACING_FRONT
+                    else
+                        CameraSelector.LENS_FACING_BACK
+                },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Cached,
+                    contentDescription = "Cambiar cámara",
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+
+            IconButton(
+                onClick = {
+                    val photoFile = File(photosDir, "IMG_${System.currentTimeMillis()}.jpg")
+                    val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+                    imageCapture.takePicture(
+                        outputOptions,
+                        ContextCompat.getMainExecutor(context),
+                        object : ImageCapture.OnImageSavedCallback {
+                            override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                                photos.add(0, photoFile)
+                                Toast.makeText(context, context.getString(R.string.photo_taken), Toast.LENGTH_SHORT).show()
+                            }
+
+                            override fun onError(exception: ImageCaptureException) {
+                                Toast.makeText(context, "Error: ${exception.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    )
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                    .padding(8.dp)
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.primaryContainer)
             ) {
-                // Botón de capturar foto
-                IconButton(
-                    onClick = {
-                        val photoFile = File(
-                            photosDir,
-                            "IMG_${System.currentTimeMillis()}.jpg"
-                        )
-                        val output = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-                        imageCapture.takePicture(
-                            output,
-                            ContextCompat.getMainExecutor(context),
-                            object : ImageCapture.OnImageSavedCallback {
-                                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                                    photos.add(0, photoFile) // mostrar las nuevas primero
-                                    Toast.makeText(context, context.getString(R.string.photo_taken), Toast.LENGTH_SHORT).show()
-                                }
-
-                                override fun onError(exception: ImageCaptureException) {
-                                    Toast.makeText(context, "Error: ${exception.message}", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        )
-                    },
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CameraAlt,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-
-                // Botón de cambiar la cámara
-                IconButton(
-                    onClick = {
-                        lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK)
-                            CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
-                    },
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(MaterialTheme.colorScheme.secondaryContainer)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Cached,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.CameraAlt,
+                    contentDescription = "Tomar foto",
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             }
         }
 
-        // Galería de fotos
+        Spacer(modifier = Modifier.height(250.dp))
         if (photos.isEmpty()) {
             Text(
                 text = stringResource(R.string.no_photos),
@@ -252,3 +248,5 @@ fun PhotoCabinView() {
         }
     }
 }
+
+
