@@ -1,9 +1,12 @@
 <resources>
     <string name="app_name">Taller 2</string>
-    <string name="camera_permission_msg">Se requiere permiso de cámara para continuar</string>
-    <string name="allow_permission">Permitir acceso a la cámara</string>
-    <string name="take_photo">Tomar foto</string>
-    <string name="switch_camera">Cambiar cámara</string>
+    <string name="take_photo">Tomar Foto</string>
+    <string name="switch_camera">Cambiar Cámara</string>
+    <string name="camera_permission_rationale">Se necesita permiso de cámara para usar esta funcionalidad</string>
+    <string name="permission_button">Permitir uso de cámara</string>
     <string name="no_photos">No hay fotos aún.</string>
     <string name="photo_taken">Foto tomada correctamente</string>
+    <string name="photo_error">Error al tomar la foto</string>
+    <string name="camera_error">Error al iniciar cámara</string>
+    <string name="allow_camera">Permitir uso de cámara</string>
 </resources>
