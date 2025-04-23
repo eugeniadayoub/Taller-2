@@ -123,7 +123,7 @@ fun PhotoCabinView() {
         }
 
         val displayMetrics = context.resources.displayMetrics
-        val screenHeightDp = with(LocalDensity.current) { displayMetrics.heightPixels / displayMetrics.density }
+        val screenHeightDp = with(LocalDensity.current) {displayMetrics.heightPixels / displayMetrics.density}
         val cameraHeightDp = (0.3f * screenHeightDp).dp
 
         Box(
@@ -216,7 +216,7 @@ fun PhotoCabinView() {
             }
         }
 
-        Spacer(modifier = Modifier.height(250.dp))
+        Spacer(modifier = Modifier.height(20.dp))
         if (photos.isEmpty()) {
             Text(
                 text = stringResource(R.string.no_photos),
