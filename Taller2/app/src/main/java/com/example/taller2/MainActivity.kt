@@ -90,13 +90,15 @@ fun PhotoCabinView() {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var lensFacing by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
-    val imageCapture = remember { ImageCapture.Builder().build() }
+    var imageCapture by remember { mutableStateOf(ImageCapture.Builder().build()) }
+
     val photosDir = remember {
         File(context.filesDir, "photos").apply { mkdirs() }
     }
     val photos = remember { mutableStateListOf<File>() }
 
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    var previewView: PreviewView? by remember { mutableStateOf(null) }
 
     LaunchedEffect(Unit) {
         val provider = withContext(Dispatchers.IO) {
@@ -105,7 +107,26 @@ fun PhotoCabinView() {
         cameraProvider = provider
     }
 
-    var previewView: PreviewView? = null
+    LaunchedEffect(lensFacing, cameraProvider) {
+        if (cameraProvider == null || previewView == null) return@LaunchedEffect
+
+        imageCapture = ImageCapture.Builder().build()
+        val preview = Preview.Builder().build()
+        val selector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
+
+        cameraProvider?.unbindAll()
+        try {
+            preview.setSurfaceProvider(previewView?.surfaceProvider)
+            cameraProvider?.bindToLifecycle(
+                lifecycleOwner,
+                selector,
+                preview,
+                imageCapture
+            )
+        } catch (e: Exception) {
+            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
 
@@ -123,8 +144,8 @@ fun PhotoCabinView() {
         }
 
         val displayMetrics = context.resources.displayMetrics
-        val screenHeightDp = with(LocalDensity.current) {displayMetrics.heightPixels / displayMetrics.density}
-        val cameraHeightDp = (0.3f * screenHeightDp).dp
+        val screenHeightDp = with(LocalDensity.current) { displayMetrics.heightPixels / displayMetrics.density }
+        val cameraHeightDp = (0.6309f * screenHeightDp).dp
 
         Box(
             modifier = Modifier
@@ -133,32 +154,14 @@ fun PhotoCabinView() {
         ) {
             AndroidView(
                 factory = { ctx ->
-                    previewView = PreviewView(ctx).apply {
+                    PreviewView(ctx).apply {
                         scaleType = PreviewView.ScaleType.FIT_CENTER
                         implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                    }.also {
+                        previewView = it
                     }
-                    previewView!!
                 },
-                modifier = Modifier.fillMaxSize(),
-                update = {
-                    val preview = Preview.Builder().build()
-                    val selector = CameraSelector.Builder()
-                        .requireLensFacing(lensFacing)
-                        .build()
-
-                    cameraProvider?.unbindAll()
-                    try {
-                        preview.setSurfaceProvider(previewView?.surfaceProvider)
-                        cameraProvider?.bindToLifecycle(
-                            lifecycleOwner,
-                            selector,
-                            preview,
-                            imageCapture
-                        )
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-                    }
-                }
+                modifier = Modifier.fillMaxSize()
             )
 
             IconButton(
@@ -248,5 +251,3 @@ fun PhotoCabinView() {
         }
     }
 }
-
-
